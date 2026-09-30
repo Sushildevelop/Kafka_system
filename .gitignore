@@ -6,3 +6,5 @@ __pycache__/
 .env.local
 .coverage
 htmlcov/
+
+uploads/study-groups/
