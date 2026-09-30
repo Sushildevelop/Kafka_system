@@ -1,2 +1,239 @@
-# Kafka_system
-An asynchronous event-driven backend built with FastAPI, Apache Kafka, and MongoDB, demonstrating event publishing, consumer-based processing, and configurable MongoDB read/write routing
+# Kafka Learning Project
+
+A small asynchronous lab for following an event from a FastAPI request, through a Kafka topic, into MongoDB. The API only publishes; a separate Kafka consumer validates and stores each message. The unit tests mock Kafka and do not need either infrastructure service.
+
+For the primary-write/replica-read design, configuration, Mermaid diagram, and
+operational requirements, see [MongoDB read/write routing](docs/read-write-database-design.md).
+
+## Project Layout
+
+```text
+kafka-learning/
+├── app/
+│   ├── main.py                 # FastAPI app and service lifespan
+│   ├── core/
+│   │   ├── config.py           # Environment-based settings
+│   │   └── database.py         # Beanie write model and Motor read/write clients
+│   ├── repositories/
+│   │   └── event_repository.py # Primary writes and replica-preferred reads
+│   ├── models/event.py         # MongoDB document and indexes
+│   ├── schemas/event.py        # Request, Kafka-message, and response schemas
+│   ├── services/
+│   │   ├── event_service.py    # Create, publish, process, and save flow
+│   │   ├── kafka_producer.py   # Async Kafka producer
+│   │   └── kafka_consumer.py   # Async Kafka consumer loop
+│   ├── api/routes/
+│   │   ├── health.py           # GET /health
+│   │   └── events.py           # Event publish and listing endpoints
+│   └── utils/logger.py         # Basic application logging
+├── tests/                      # Infrastructure-free API tests
+├── docker/kafka/               # Reserved for Kafka learning configs
+├── docker-compose.yml          # MongoDB and single-node KRaft Kafka
+├── .env.example                # Local development settings
+└── pyproject.toml              # Runtime and test dependencies
+```
+
+## Prerequisites and Install
+
+Install Python 3.13, Docker Desktop, and [uv](https://docs.astral.sh/uv/). From this directory:
+
+```powershell
+uv sync
+```
+
+`uv sync` creates `.venv`, installs the application and development dependencies, and uses `uv.lock` when present. Settings are read from `.env`; the checked-in development file uses the local Docker ports. For a fresh checkout, copy `.env.example` to `.env`.
+
+## Start the Lab
+
+1. Start MongoDB and Kafka:
+
+   ```powershell
+   docker compose up -d
+   ```
+
+2. Create a topic with three partitions (useful for the experiments below):
+
+   ```powershell
+   docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic test-events --partitions 3 --replication-factor 1
+   ```
+
+3. Start FastAPI from this directory:
+
+   ```powershell
+   uv run uvicorn app.main:app --reload
+   ```
+
+The API is at `http://localhost:8000`; interactive API docs are at `http://localhost:8000/docs`.
+
+The lifespan initializes separate Motor clients and binds Beanie to the write database, where Beanie creates the `Event` indexes. Consumer writes use Beanie's atomic upsert with majority write concern on the primary. Normal list requests use the Motor read client and prefer a secondary; `?consistency=strong` reads from the primary. Kafka connection failures are logged and leave the HTTP process running; a publish request returns `503` if the producer could not connect. If Kafka was unavailable during startup, start Kafka and restart the app. The consumer task does not block the event loop. On shutdown, the consumer task, producer, and both MongoDB clients are closed.
+
+The Compose MongoDB service is a standalone development server. With `secondaryPreferred`, reads fall back to that server's primary, so this local setup verifies application behavior but does not provide read offload. Configure both MongoDB URLs for the same real replica set (for example, the same Atlas cluster) to serve normal reads from secondaries. Use the database name `kafka_learning` on every replica-set member; MongoDB replication does not copy data between differently named databases.
+
+## Verify Services
+
+```powershell
+docker compose ps
+docker compose logs kafka mongodb
+```
+
+Wait for both containers to report `healthy`. Check Kafka and its topic:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic test-events
+```
+
+Check FastAPI:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+```
+
+Expected response: `status: ok`.
+
+## Exact Manual Event Flow
+
+1. Start infrastructure with `docker compose up -d`, create `test-events` using the command above, and start FastAPI with `uv run uvicorn app.main:app --reload`.
+2. In PowerShell, publish an event:
+
+   ```powershell
+   $body = @{ event_type = 'user.created'; user_id = 'user_123'; payload = @{ name = 'Sushil' } } | ConvertTo-Json -Depth 5
+   Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/events -ContentType 'application/json' -Body $body
+   ```
+
+3. The API responds with `success`, `message`, and a generated `event_id` (HTTP `202 Accepted`). The producer log includes `Event published to Kafka`.
+4. The consumer logs `Event received from Kafka`, validates the message, and saves it to MongoDB. Successful processing logs `Event saved to MongoDB` and `Event processed`.
+5. Read processed events, optionally paginating with `skip` and `limit`:
+
+   ```powershell
+   Invoke-RestMethod 'http://localhost:8000/api/events?skip=0&limit=20'
+   ```
+
+The API's successful publish response confirms Kafka accepted the message; persistence happens asynchronously afterward. A malformed request returns `422`. If MongoDB is unavailable, the consumer logs the failure and retries the message without committing its offset.
+
+## Verify MongoDB
+
+Open a Mongo shell in the container:
+
+```powershell
+docker compose exec mongodb mongosh kafka_learning
+```
+
+Then inspect saved events:
+
+```javascript
+db.events.find().sort({ created_at: -1 }).limit(10).pretty()
+db.events.countDocuments()
+```
+
+The document has an `event_id`, event data, `status: "processed"`, `created_at`, and `processed_at`. The `event_id` index is unique, and indexes also cover event type, user, and creation time.
+
+## Kafka Concepts in This Project
+
+- **Kafka** is the broker: it accepts and retains event records so the API and processing code do not have to run as one synchronous operation.
+- A **producer** publishes a record. Here FastAPI calls the async producer after validating the request.
+- A **topic** is a named stream of records. This project publishes to `test-events`.
+- A **partition** is an ordered log within a topic. Kafka distributes records among partitions; order is guaranteed within one partition, not across the whole topic.
+- A **consumer** reads records. This project's consumer validates each JSON record and stores it in MongoDB.
+- A **consumer group** is one logical subscriber made of one or more consumers. Members divide the topic's partitions; a partition is assigned to at most one member in the group at a time.
+- An **offset** is a record's position in a partition. Kafka stores committed offsets per group so that group can continue after a restart.
+
+The producer uses `event_id` as the Kafka key. Kafka hashes a key to select a partition, so records with the same key are routed consistently. Since this demo generates a new event ID per request, each event will typically be spread among the topic's partitions.
+
+```text
+Client -> FastAPI -> Producer -> test-events topic -> Consumer -> MongoDB
+```
+
+## Tests
+
+Run the unit tests without Docker:
+
+```powershell
+uv run pytest
+```
+
+- **Unit tests** exercise the health endpoint, request validation, and publishing response with a fake producer. They do not initialize MongoDB or Kafka.
+- **Integration tests** use the manual flow above with Docker services running; verify the event appears in `GET /api/events` and in `db.events`.
+- **Manual Kafka tests** use the Kafka CLI and the experiments below to observe partitions, groups, and offsets.
+
+## Kafka Experiments
+
+### 1. Multiple Messages
+
+Send ten requests to `POST /api/events` (repeat the PowerShell command in a loop, or send requests from `/docs`). Check the API log for ten `Event published to Kafka` entries, the consumer log for ten received events, and MongoDB for the saved records:
+
+```javascript
+db.events.countDocuments()
+```
+
+### 2. Two Consumers in One Group
+
+Keep the first app running. In a second terminal, start another app instance with the same group and a different HTTP port:
+
+```powershell
+uv run uvicorn app.main:app --port 8001
+```
+
+With three partitions and two group members, Kafka assigns partitions across the two consumers. Publish several events and inspect both terminals; each record is delivered to one member, not both. Stop the second instance with `Ctrl+C` when done. Do not use `--reload` for this experiment because reload creates extra processes.
+
+### 3. Different Consumer Groups
+
+Stop both app instances. In separate terminals start each with its own group:
+
+```powershell
+$env:KAFKA_CONSUMER_GROUP = 'group-A'; uv run uvicorn app.main:app --port 8000
+```
+
+```powershell
+$env:KAFKA_CONSUMER_GROUP = 'group-B'; uv run uvicorn app.main:app --port 8001
+```
+
+Each group is an independent subscriber and receives its own copy of the topic stream. New groups use the configured `earliest` reset policy when they have no committed offsets. Stop both processes afterward. The two consumers write into the same MongoDB collection; the unique event ID index makes repeat delivery idempotent.
+
+### 4. Consumer Restart and Offsets
+
+Stop the app, publish some events using a separate terminal Kafka producer, then start the app again with the same group. The consumer resumes after that group's committed offsets. A new group has no stored offsets and, with `earliest`, starts at the earliest retained record. For a simple broker-side publisher:
+
+```powershell
+docker compose exec -T kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic test-events --property parse.key=true --property key.separator=:
+```
+
+Type one line such as `manual-1:{"event_id":"manual-1","event_type":"demo.message","user_id":"user_123","payload":{"text":"hello"}}`, then press `Ctrl+Z` and Enter to finish. The app's consumer validates the same event fields as API-published messages.
+
+### 5. Kafka Key
+
+The app already sets `event_id` as the message key. Inspect keys and values with the console consumer:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test-events --from-beginning --property print.key=true --property key.separator=:
+```
+
+The key is visible before the JSON value. Publishing multiple records with an identical key routes them to the same partition, preserving their relative order there.
+
+### 6. Partitions
+
+Inspect the three topic partitions:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic test-events
+```
+
+The resulting assignment is conceptually:
+
+```text
+Producer
+   -> Kafka topic test-events
+      -> Partition 0
+      -> Partition 1
+      -> Partition 2
+```
+
+In a group, at most three consumers can actively read this three-partition topic at once; additional members wait without an assignment. Kafka assigns records with matching keys to the same partition.
+
+## Stop the Lab
+
+```powershell
+docker compose down
+```
+
+This stops the containers and keeps MongoDB data in its named volume. To remove that data as well, run `docker compose down -v`.
