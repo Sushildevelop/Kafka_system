@@ -237,3 +237,108 @@ docker compose down
 ```
 
 This stops the containers and keeps MongoDB data in its named volume. To remove that data as well, run `docker compose down -v`.
+
+
+## Study Group Chat — Kafka Implementation
+
+This project now includes **group-only study chat**. There is deliberately no 1-to-1/private chat model. A study group can contain multiple users, and members can exchange text, images, files, and videos.
+
+### Architecture
+
+    User A ─┐
+    User B ─┼─ WebSocket connections ─┐
+    User C ─┘                         │
+                                      ▼
+                             FastAPI Study Group API
+                                      │
+                             Kafka: study-group-chat
+                                      │
+                         key = group_id (ordering per group)
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    ▼                                   ▼
+           MongoDB persistence                Chat fan-out consumer
+           study_group_messages                         │
+                    │                                    ▼
+                    └──────────────► group WebSockets
+
+Media bytes: FastAPI -> uploads/study-groups/<group_id>/
+Kafka payload: metadata + media URL only (never raw binary)
+
+### Why the Kafka key is group_id
+
+Every message published for the same study group uses the group ID as the Kafka record key. Kafka therefore routes that group's messages consistently to one partition, preserving their relative order inside that partition. Different groups can be distributed across the three chat partitions.
+
+The chat fan-out consumer uses its own consumer group (`study-group-chat-fanout`). Every running API instance should receive every chat event so it can broadcast the event to WebSocket users connected to that instance. The existing `kafka-learning-group` remains responsible for the original `test-events` learning flow.
+
+### Supported message types
+
+| Type | Endpoint | Kafka contains | Stored in MongoDB |
+|---|---|---|---|
+| Text | POST /api/study-groups/{group_id}/messages/text | text + metadata | text |
+| Image | POST /api/study-groups/{group_id}/messages/media | media URL + metadata | media URL + metadata |
+| File | same media endpoint | media URL + metadata | media URL + metadata |
+| Video | same media endpoint | media URL + metadata | media URL + metadata |
+
+Default media limit is **50 MB**. Change `CHAT_MEDIA_MAX_SIZE_MB` for the learning environment. In production, replace local `uploads/` with object storage and keep only the object URL/key in MongoDB/Kafka.
+
+### Group Chat API
+
+Create a group:
+
+    POST /api/study-groups
+    Content-Type: application/json
+
+    {
+      "name": "Python + Kafka Study Group",
+      "owner_id": "user_1",
+      "member_ids": ["user_2", "user_3"]
+    }
+
+Add a member:
+
+    POST /api/study-groups/{group_id}/members
+    {"user_id": "user_4"}
+
+Send text:
+
+    POST /api/study-groups/{group_id}/messages/text
+    {"sender_id": "user_1", "text": "Today we will learn Kafka partitions."}
+
+Send image/file/video using multipart form data:
+
+    curl.exe -X POST "http://localhost:8000/api/study-groups/<GROUP_ID>/messages/media?sender_id=user_1" -F "file=@C:\\path\\to\\lesson.mp4"
+
+Read group history:
+
+    GET /api/study-groups/{group_id}/messages?user_id=user_1&skip=0&limit=50
+
+Open the real-time group WebSocket:
+
+    ws://localhost:8000/api/study-groups/{group_id}/ws?user_id=user_1
+
+The WebSocket is **group-only**. The server checks membership before accepting the connection. Messages use the path **HTTP -> Kafka -> consumer -> MongoDB -> WebSocket broadcast**.
+
+### Kafka chat topic
+
+The application automatically creates `study-group-chat` with three partitions and one-day retention for this learning project.
+
+Inspect it with:
+
+    docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic study-group-chat
+
+    docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic study-group-chat --from-beginning --property print.key=true --property key.separator=:
+
+### Multi-user test
+
+1. Create one group with users `user_1`, `user_2`, and `user_3`.
+2. Open three WebSocket clients using the same group ID and different member IDs.
+3. Send a text message as `user_1`.
+4. Verify all three connected members receive the same persisted message.
+5. Upload an image, file, and video and verify each message contains its type, file name, MIME type, size, and media URL.
+6. Restart the API and reconnect. Use the history endpoint to verify MongoDB persistence.
+7. Start a second API instance on another port and connect a member there. Publish a message and verify both API instances receive the Kafka event.
+
+### Important production note
+
+The current WebSocket connection manager is in-process, which is appropriate for this Kafka learning project. Kafka provides cross-instance event delivery, while the dedicated fan-out consumer ensures each API instance sees every chat event. Production deployments should additionally use authentication/authorization, object storage, virus scanning, rate limits, and a durable distributed WebSocket/session layer where needed.
