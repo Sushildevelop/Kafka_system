@@ -1,0 +1,140 @@
+
+services:
+
+  # ============================================================
+  # MongoDB
+  # ============================================================
+  mongodb:
+    image: mongo:8.0
+    container_name: kafka-learning-mongodb
+    restart: unless-stopped
+
+    ports:
+      - "27017:27017"
+
+    volumes:
+      - mongodb_data:/data/db
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "db.adminCommand('ping').ok"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+
+  # ============================================================
+  # Kafka
+  # ============================================================
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: kafka-learning-kafka
+    hostname: kafka
+    restart: unless-stopped
+
+    ports:
+      - "9092:9092"
+
+    environment:
+
+      # -------------------------
+      # Kafka Node
+      # -------------------------
+      KAFKA_NODE_ID: 1
+
+      # KRaft mode:
+      # Kafka acts as both broker and controller
+      KAFKA_PROCESS_ROLES: broker,controller
+
+
+      # -------------------------
+      # Kafka Listeners
+      # -------------------------
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:29093,HOST://:9092
+
+      # Addresses Kafka tells clients to use
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,HOST://localhost:9092
+
+      # Security protocol for each listener
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
+
+
+      # -------------------------
+      # Controller Configuration
+      # -------------------------
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+
+
+      # -------------------------
+      # Internal Kafka Communication
+      # -------------------------
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+
+      # -------------------------
+      # Single-node development
+      # -------------------------
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+
+      # -------------------------
+      # Consumer Group
+      # -------------------------
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+
+      # -------------------------
+      # Development Convenience
+      # -------------------------
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+
+      # -------------------------
+      # KRaft Cluster ID
+      # -------------------------
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-learning-ui
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kafka
+
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+
+# ==============================================================
+# Persistent Volumes
+# ==============================================================
+volumes:
+  mongodb_data:
+
