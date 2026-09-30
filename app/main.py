@@ -20,7 +20,7 @@ async def lifespan(app:FastAPI):
     try:
         er=EventRepository(db.write_database,db.read_database); sgr=StudyGroupRepository(db.write_database,db.read_database)
         producer=KafkaProducerService(settings); consumer=KafkaConsumerService(settings,er); chat_consumer=StudyGroupChatConsumer(settings,sgr,chat_connection_manager)
-        app.state.kafka_producer=producer; app.state.event_repository=er; app.state.study_group_repository=sgr
+        app.state.kafka_producer=producer; app.state.event_repository=er; app.state.study_group_repository=sgr; app.state.settings=settings
         await create_topics(settings); await producer.start(); await consumer.start(); await chat_consumer.start(); yield
     finally:
         if chat_consumer: await chat_consumer.stop()
