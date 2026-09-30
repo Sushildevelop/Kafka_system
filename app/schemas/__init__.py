@@ -1,0 +1,1 @@
+"""API and Kafka message schemas."""
