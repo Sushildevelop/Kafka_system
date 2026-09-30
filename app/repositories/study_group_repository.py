@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from beanie.operators import Set
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from motor.motor_asyncio import AsyncIOMotorDatabase\nfrom pymongo import ReturnDocument
 from app.models.study_group import GroupMessage, StudyGroup
 from app.schemas.study_group import GroupChatMessageEvent, GroupMessageResponse, StudyGroupResponse
 class StudyGroupRepository:
@@ -11,7 +11,7 @@ class StudyGroupRepository:
     async def get_group(self,group_id:str,*,use_primary:bool=False)->StudyGroup|None:
         c=self._write_groups if use_primary else self._read_groups; d=await c.find_one({"group_id":group_id}); return StudyGroup.model_validate(d) if d else None
     async def add_member(self,group_id:str,user_id:str)->StudyGroup|None:
-        d=await self._write_groups.find_one_and_update({"group_id":group_id},{"$addToSet":{"member_ids":user_id},"$set":{"updated_at":datetime.now(timezone.utc)}},return_document=True); return StudyGroup.model_validate(d) if d else None
+        d=await self._write_groups.find_one_and_update({"group_id":group_id},{"$addToSet":{"member_ids":user_id},"$set":{"updated_at":datetime.now(timezone.utc)}},return_document=ReturnDocument.AFTER); return StudyGroup.model_validate(d) if d else None
     async def save_message(self,event:GroupChatMessageEvent)->GroupMessageResponse:
         await GroupMessage.find_one({"message_id":event.message_id}).upsert(Set({"created_at":event.created_at}),on_insert=GroupMessage(message_id=event.message_id,group_id=event.group_id,sender_id=event.sender_id,message_type=event.message_type,text=event.text,media_url=event.media_url,file_name=event.file_name,mime_type=event.mime_type,file_size=event.file_size,created_at=event.created_at))
         d=await self._write_messages.find_one({"message_id":event.message_id},{"_id":0})
