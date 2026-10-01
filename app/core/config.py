@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_name: str
     app_env: str
     debug: bool
-    frontend_urls: str = "http://localhost:3000"
+    frontend_urls: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     mongodb_url: str | None = None
     mongodb_write_url: str | None = None
