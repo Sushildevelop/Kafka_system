@@ -1,5 +1,66 @@
 "use client";
-import {useEffect,useRef,useState} from "react";import {motion} from "framer-motion";import Link from "next/link";import {ArrowLeft,CheckCircle2,ShieldCheck} from "lucide-react";import {loginWithGoogle} from "@/lib/auth";
-declare global{interface Window{google?:any}}
-export default function LoginPage(){const [ready,setReady]=useState(false),[message,setMessage]=useState(""),ref=useRef<HTMLDivElement>(null);useEffect(()=>{const id=process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;if(!id)return;const s=document.createElement("script");s.src="https://accounts.google.com/gsi/client";s.async=true;s.defer=true;s.onload=()=>{if(!window.google||!ref.current)return;window.google.accounts.id.initialize({client_id:id,callback:async(r:{credential:string})=>{try{setMessage("Signing you in…");await loginWithGoogle(r.credential);window.location.href="/study-groups"}catch{setMessage("Google sign-in could not be completed. Check the API and OAuth configuration.")}}});window.google.accounts.id.renderButton(ref.current,{theme:"outline",size:"large",shape:"rectangular",text:"continue_with",logo_alignment:"left",width:360});setReady(true)};document.head.appendChild(s);return()=>s.remove()},[]);
-return <main style={{minHeight:"100vh",display:"grid",placeItems:"center",padding:24,position:"relative",overflow:"hidden"}}><div className="grid-bg" style={{position:"absolute",inset:0}}/><motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="glass login-grid" style={{width:"min(980px,100%)",borderRadius:30,overflow:"hidden",display:"grid",gridTemplateColumns:"1.02fr .98fr",position:"relative"}}><div style={{padding:"54px 48px",background:"linear-gradient(145deg,rgba(96,231,255,.08),transparent 55%)"}}><Link href="/" style={{color:"var(--muted)",display:"inline-flex",gap:7,alignItems:"center"}}><ArrowLeft size={16}/> Back to Study AI</Link><h1 style={{fontFamily:"Space Grotesk",fontSize:48,lineHeight:1.05,letterSpacing:"-.06em",margin:"70px 0 18px"}}>Your study room is one sign-in away.</h1><p style={{color:"var(--muted)",fontSize:17,lineHeight:1.7,maxWidth:430}}>Sign in with Google to create groups, join conversations and bring AI into your study sessions.</p><div style={{marginTop:32,display:"grid",gap:12,color:"var(--muted)",fontSize:14}}>{["No passwords to manage","Verified Google identity","Delete your account any time"].map(t=><div key={t} style={{display:"flex",gap:10,alignItems:"center"}}><CheckCircle2 size={17} color="var(--green)"/>{t}</div>)}</div></div><div style={{padding:"54px 42px",display:"grid",placeItems:"center"}}><div style={{width:"100%",maxWidth:360,textAlign:"center"}}><div style={{width:72,height:72,margin:"0 auto 22px",borderRadius:22,display:"grid",placeItems:"center",background:"linear-gradient(135deg,rgba(96,231,255,.2),rgba(143,124,255,.22))"}}><ShieldCheck size={32} color="var(--cyan)"/></div><h2 style={{fontFamily:"Space Grotesk",fontSize:28,margin:"0 0 8px"}}>Welcome back</h2><p style={{color:"var(--muted)",margin:"0 0 28px"}}>Continue to your study workspace.</p><div style={{width:"100%",minHeight:54,padding:6,borderRadius:16,display:"flex",justifyContent:"center",alignItems:"center",background:"#fff",border:"1px solid rgba(255,255,255,.14)",boxShadow:"0 14px 40px rgba(0,0,0,.22)",overflow:"hidden"}}><div ref={ref} style={{width:"100%",display:"flex",justifyContent:"center"}}/></div>{!ready&&!message&&<p style={{color:"var(--muted)",fontSize:13}}>Loading Google sign-in…</p>}{message&&<p style={{color:message.includes("could not")?"#ff8c9b":"var(--cyan)",fontSize:13}}>{message}</p>}<p style={{color:"var(--muted)",fontSize:12,lineHeight:1.6,marginTop:26}}>Google identity is verified by FastAPI before a Study AI session is created.</p></div></div></motion.div></main>}
+
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { ArrowLeft, CheckCircle2, Chrome, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { demoLogin } from "@/lib/auth";
+
+export default function LoginPage() {
+  const router = useRouter();
+
+  function handleDemoLogin() {
+    demoLogin();
+    router.push("/study-groups");
+  }
+
+  return (
+    <main className="auth-page">
+      <div className="grid-bg auth-bg" />
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.45 }}
+        className="glass auth-shell"
+      >
+        <section className="auth-story">
+          <Link href="/" className="back-link"><ArrowLeft size={16} /> Back to Study AI</Link>
+          <div className="auth-kicker"><Sparkles size={15} /> STUDY AI</div>
+          <h1>Study together.<br /><span>Learn smarter.</span></h1>
+          <p>
+            Enter your collaborative study space, talk with your group, share resources,
+            and bring AI into the conversation.
+          </p>
+          <div className="auth-benefits">
+            {[
+              "Real-time group conversations",
+              "Files, images and video sharing",
+              "AI-powered study assistance",
+            ].map((item) => (
+              <div key={item}><CheckCircle2 size={17} />{item}</div>
+            ))}
+          </div>
+        </section>
+
+        <section className="auth-panel">
+          <div className="auth-logo"><Chrome size={34} /></div>
+          <div className="auth-panel-title">Welcome to Study AI</div>
+          <p className="auth-panel-copy">Continue to your study workspace.</p>
+
+          <button type="button" className="google-demo-button" onClick={handleDemoLogin}>
+            <span className="google-mark">G</span>
+            <span>Continue with Google</span>
+            <span className="google-arrow">→</span>
+          </button>
+
+          <div className="auth-divider"><span>or</span></div>
+          <button type="button" className="guest-button" onClick={handleDemoLogin}>
+            Enter study workspace
+          </button>
+
+          <p className="demo-note">Demo mode · Google authentication is bypassed for this frontend prototype.</p>
+        </section>
+      </motion.div>
+    </main>
+  );
+}
