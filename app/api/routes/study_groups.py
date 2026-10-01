@@ -12,6 +12,14 @@ def media_type(content_type:str|None)->Literal["image","file","video"]:
     if content_type and content_type.startswith("image/"): return "image"
     if content_type and content_type.startswith("video/"): return "video"
     return "file"
+@router.get("",response_model=list[StudyGroupResponse])
+async def list_study_groups(request:Request,user_id:str=Query(...)):
+    return await request.app.state.study_group_repository.list_groups_for_user(user_id)
+@router.get("/{group_id}",response_model=StudyGroupResponse)
+async def get_study_group(group_id:str,request:Request,user_id:str=Query(...)):
+    try: return await require_member(group_id,user_id,request.app.state.study_group_repository)
+    except LookupError as e: raise HTTPException(404,str(e)) from e
+    except PermissionError as e: raise HTTPException(403,str(e)) from e
 @router.post("",response_model=StudyGroupResponse,status_code=status.HTTP_201_CREATED)
 async def create_study_group(data:StudyGroupCreate,request:Request): return await create_group(data,request.app.state.study_group_repository)
 @router.post("/{group_id}/members",response_model=StudyGroupResponse)

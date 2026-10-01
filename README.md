@@ -342,3 +342,37 @@ Inspect it with:
 ### Important production note
 
 The current WebSocket connection manager is in-process, which is appropriate for this Kafka learning project. Kafka provides cross-instance event delivery, while the dedicated fan-out consumer ensures each API instance sees every chat event. Production deployments should additionally use authentication/authorization, object storage, virus scanning, rate limits, and a durable distributed WebSocket/session layer where needed.
+
+## Next.js Frontend
+
+The repository now includes a production-oriented frontend in `frontend/` for the study-group experience.
+
+### Frontend stack
+
+- Next.js + React + TypeScript
+- Framer Motion for interface motion
+- React Three Fiber / Drei for the interactive 3D landing visual
+- Google Identity Services for Google-only sign-in
+- WebSocket client for real-time study-group chat
+- Responsive glass/neon visual system
+
+### Run the frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to the same Google web client ID configured in the FastAPI `.env`. Set `NEXT_PUBLIC_API_URL` to the FastAPI API root (default `http://localhost:8000/api`).
+
+### Frontend routes
+
+- `/` — product landing page and 3D hero
+- `/login` — Google authentication
+- `/study-groups` — study-group discovery and creation
+- `/study-groups/[groupId]` — real-time group chat, media uploads and AI companion surface
+- `/account` — session and account deletion controls
+
+The frontend does not use Firebase. Google ID tokens are sent to the FastAPI `POST /api/auth/google` endpoint, verified server-side, and exchanged for the application's signed session token.
