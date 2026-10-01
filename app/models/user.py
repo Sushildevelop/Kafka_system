@@ -10,7 +10,7 @@ class User(Document):
 
     user_id: Annotated[str, Indexed(unique=True)]
     google_sub: Annotated[str, Indexed(unique=True)]
-    email: Annotated[str, Indexed(unique=True)]
+    email: Annotated[str, Indexed()]
     name: str
     picture: str | None = None
     email_verified: bool = False
