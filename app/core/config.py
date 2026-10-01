@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_name: str
     app_env: str
     debug: bool
+    frontend_urls: str = "http://localhost:3000"
 
     mongodb_url: str | None = None
     mongodb_write_url: str | None = None
@@ -65,6 +66,10 @@ class Settings(BaseSettings):
                 "readConcernLevel": "majority",
             },
         )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [value.strip() for value in self.frontend_urls.split(",") if value.strip()]
 
     @property
     def google_audiences(self) -> list[str]:
