@@ -1,4 +1,4 @@
-# StudySearch Frontend
+# Study AI Frontend
 Next.js frontend for the Kafka System study-group experience.
 ## Run
 npm install
