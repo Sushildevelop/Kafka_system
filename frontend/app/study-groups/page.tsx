@@ -1,145 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowUpRight, MessageCircleMore, Plus, Search, Users } from "lucide-react";
+import { ArrowUpRight, BrainCircuit, Check, Edit3, MessageCircleMore, MoreHorizontal, Plus, Search, Trash2, Users, X, Sparkles } from "lucide-react";
 import { api, getUser, logout, type AuthUser } from "@/lib/auth";
 
-type Group = {
-  group_id: string;
-  name: string;
-  owner_id: string;
-  member_ids: string[];
-  created_at: string;
-  updated_at: string;
-};
+type Group={group_id:string;name:string;owner_id:string;member_ids:string[];created_at:string;updated_at:string};
+const accents=["cyan","violet","pink","green"];
 
-export default function StudyGroups() {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [name, setName] = useState("");
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
+export default function StudyGroups(){
+  const [user,setUser]=useState<AuthUser|null>(null),[groups,setGroups]=useState<Group[]>([]),[name,setName]=useState(""),[editing,setEditing]=useState<Group|null>(null),[editName,setEditName]=useState(""),[menu,setMenu]=useState(""),[search,setSearch]=useState(""),[loading,setLoading]=useState(false),[error,setError]=useState("");
 
-  useEffect(() => {
-    const currentUser = getUser();
-    if (!currentUser) {
-      window.location.href = "/login";
-      return;
-    }
-    setUser(currentUser);
-
-    api.fetch(`/study-groups?user_id=${encodeURIComponent(currentUser.user_id)}`)
-      .then(async (response) => (response.ok ? response.json() : []))
-      .then(setGroups)
-      .catch(() => setGroups([]));
-  }, []);
-
-  async function createGroup() {
-    const trimmedName = name.trim();
-    if (!user || !trimmedName || loading) return;
-
-    setLoading(true);
-    try {
-      const response = await api.fetch("/study-groups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: trimmedName,
-          owner_id: user.user_id,
-          member_ids: [user.user_id],
-        }),
-      });
-
-      if (!response.ok) return;
-
-      const createdGroup: Group = await response.json();
-      setGroups((current) => [createdGroup, ...current]);
-      setName("");
-      setOpen(false);
-    } finally {
-      setLoading(false);
-    }
+  async function loadGroups(id:string){
+    try{const r=await api.fetch("/study-groups?user_id="+encodeURIComponent(id));if(r.ok)setGroups(await r.json());else setError("Could not load your study groups.");}
+    catch{setError("Could not connect to Study AI.");}
   }
+  useEffect(()=>{const u=getUser();if(!u){location.href="/login";return}setUser(u);loadGroups(u.user_id)},[]);
 
-  const visibleGroups = groups.filter((group) =>
-    group.name.toLowerCase().includes(search.trim().toLowerCase())
-  );
+  async function createGroup(){
+    const n=name.trim();if(!user||!n||loading)return;setLoading(true);setError("");
+    try{const r=await api.fetch("/study-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,owner_id:user.user_id,member_ids:[user.user_id]})});
+      if(!r.ok)throw new Error("Could not create the group.");const created:Group=await r.json();setGroups(v=>[created,...v]);setName("");
+    }catch(e){setError(e instanceof Error?e.message:"Could not create the group.");}finally{setLoading(false)}
+  }
+  function startEdit(g:Group){setEditing(g);setEditName(g.name);setMenu("")}
+  async function saveEdit(){
+    if(!user||!editing||!editName.trim()||loading)return;setLoading(true);setError("");
+    try{const r=await api.fetch("/study-groups/"+editing.group_id+"?user_id="+encodeURIComponent(user.user_id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:editName.trim()})});
+      if(!r.ok)throw new Error(r.status===403?"Only the group owner can edit this group.":"Could not update the group.");const updated:Group=await r.json();setGroups(v=>v.map(g=>g.group_id===updated.group_id?updated:g));setEditing(null);
+    }catch(e){setError(e instanceof Error?e.message:"Could not update the group.");}finally{setLoading(false)}
+  }
+  async function deleteGroup(g:Group){
+    if(!user||g.owner_id!==user.user_id||loading)return;if(!confirm("Delete “"+g.name+"”? This removes the group."))return;
+    setLoading(true);setError("");
+    try{const r=await api.fetch("/study-groups/"+g.group_id+"?user_id="+encodeURIComponent(user.user_id),{method:"DELETE"});
+      if(!r.ok)throw new Error(r.status===403?"Only the group owner can delete this group.":"Could not delete the group.");setGroups(v=>v.filter(x=>x.group_id!==g.group_id));setMenu("");
+    }catch(e){setError(e instanceof Error?e.message:"Could not delete the group.");}finally{setLoading(false)}
+  }
+  const visible=useMemo(()=>groups.filter(g=>g.name.toLowerCase().includes(search.trim().toLowerCase())),[groups,search]);
 
-  return (
-    <main className="groups-page">
-      <div className="grid-bg groups-bg" />
-      <header className="groups-header">
-        <Link href="/" className="brand">Study<span>AI</span><b>.</b></Link>
-
-        <div className="groups-header-actions">
-          <div className="profile-chip">
-            <div className="avatar-fallback">{user?.name?.slice(0, 1).toUpperCase() ?? "S"}</div>
-            <span>{user?.name ?? "Study AI Student"}</span>
-          </div>
-          <Link href="/account" className="header-link">Account</Link>
-          <button className="header-link logout-button" onClick={() => { logout(); window.location.href = "/login"; }}>Logout</button>
-        </div>
-      </header>
-
-      <section className="groups-shell">
-        <div className="groups-toolbar">
-          <div>
-            <div className="eyebrow">STUDY AI · WORKSPACE</div>
-            <h1>Your study groups</h1>
-            <p>Create or join focused spaces for learning, discussion, resources, and AI assistance.</p>
-          </div>
-          <button className="primary-action" onClick={() => setOpen((value) => !value)}>
-            <Plus size={18} /> New group
-          </button>
-        </div>
-
-        {open && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="create-group glass">
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && createGroup()}
-              placeholder="e.g. Quantum Computing — Evening"
-            />
-            <button disabled={loading} onClick={createGroup}>{loading ? "Creating…" : "Create group"}</button>
-          </motion.div>
-        )}
-
-        <div className="groups-search glass">
-          <Search size={17} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search your study groups…" />
-        </div>
-
-        {visibleGroups.length === 0 ? (
-          <div className="empty-state glass">
-            <MessageCircleMore size={28} />
-            <h2>{groups.length ? "No matching groups" : "No study groups yet"}</h2>
-            <p>{groups.length ? "Try a different search term." : "Create your first group and start studying together."}</p>
-          </div>
-        ) : (
-          <div className="groups-grid">
-            {visibleGroups.map((group) => (
-              <Link href={`/study-groups/${group.group_id}`} key={group.group_id}>
-                <motion.article whileHover={{ y: -5 }} className="group-card glass">
-                  <div className="group-card-top">
-                    <div className="group-icon"><MessageCircleMore size={21} /></div>
-                    <ArrowUpRight size={18} />
-                  </div>
-                  <h2>{group.name}</h2>
-                  <p>Live study room for focused collaboration and shared learning.</p>
-                  <div className="group-meta">
-                    <span><Users size={14} /> {group.member_ids.length} members</span>
-                    <span>Live</span>
-                  </div>
-                </motion.article>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-    </main>
-  );
+  return <main className="groups-page"><div className="grid-bg groups-bg"/>
+    <header className="groups-header"><Link href="/" className="brand">Study<span>AI</span><b>.</b></Link>
+      <div className="groups-header-actions"><Link href="/account" className="header-link">Account</Link><div className="profile-chip"><div className="avatar-fallback">{user?.name?.[0]?.toUpperCase()??"S"}</div><span>{user?.name??"Study AI Student"}</span></div><button className="header-link" onClick={()=>{logout();location.href="/login"}}>Logout</button></div>
+    </header>
+    <section className="groups-shell">
+      <div className="groups-hero"><div><div className="eyebrow"><Sparkles size={13}/> STUDY AI · COLLABORATION OS</div><h1>Study better.<br/><span>Together.</span></h1><p>Build focused rooms for your courses, projects and exam preparation. Every group comes with live chat and an AI study companion.</p></div><div className="workspace-orb"><BrainCircuit size={42}/><span>{groups.length} active spaces</span></div></div>
+      <div className="group-stat-row"><div className="mini-stat glass"><b>{groups.length}</b><span>Study spaces</span></div><div className="mini-stat glass"><b>{groups.reduce((n,g)=>n+g.member_ids.length,0)}</b><span>Member seats</span></div><div className="mini-stat glass"><b>AI</b><span>Learning companion</span></div></div>
+      <div className="groups-controls"><div className="groups-search glass"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search study spaces…"/>{search&&<button onClick={()=>setSearch("")}><X size={15}/></button>}</div><div className="create-inline glass"><input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createGroup()} placeholder="Name a new study group…"/><button onClick={createGroup} disabled={!name.trim()||loading}><Plus size={17}/><span>{loading?"Creating…":"Create group"}</span></button></div></div>
+      {error&&<div className="group-error glass">{error}<button onClick={()=>setError("")}><X size={15}/></button></div>}
+      {visible.length===0?<div className="empty-state glass"><BrainCircuit size={32}/><h2>{groups.length?"No matching spaces":"Your study workspace is empty"}</h2><p>{groups.length?"Try another search.":"Create your first study group and bring your learning team together."}</p></div>:
+      <div className="groups-grid">{visible.map((g,i)=><motion.article key={g.group_id} whileHover={{y:-6}} className={"group-card group-card-"+accents[i%accents.length]+" glass"}>
+        <div className="group-card-top"><div className="group-icon"><MessageCircleMore size={21}/></div><div className="group-menu-wrap"><button className="icon-button" onClick={()=>setMenu(menu===g.group_id?"":g.group_id)}><MoreHorizontal size={18}/></button>{menu===g.group_id&&<div className="group-menu"><button onClick={()=>startEdit(g)}><Edit3 size={15}/> Edit group</button>{g.owner_id===user?.user_id&&<button className="danger" onClick={()=>deleteGroup(g)}><Trash2 size={15}/> Delete group</button>}</div>}</div></div>
+        <Link href={"/study-groups/"+g.group_id}><div className="group-live"><i/> LIVE STUDY ROOM</div><h2>{g.name}</h2><p>Focused collaboration, shared resources, persistent discussion and AI-assisted learning.</p></Link>
+        <div className="group-card-footer"><span><Users size={14}/> {g.member_ids.length} members</span><Link href={"/study-groups/"+g.group_id}><span>Open room <ArrowUpRight size={15}/></span></Link></div>
+      </motion.article>)}</div>}
+      {editing&&<div className="modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&setEditing(null)}><motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} className="edit-modal glass"><div className="modal-head"><div><span className="eyebrow">GROUP SETTINGS</span><h2>Edit study group</h2></div><button onClick={()=>setEditing(null)}><X size={18}/></button></div><label>Group name<input autoFocus value={editName} onChange={e=>setEditName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveEdit()}/></label><div className="modal-actions"><button className="secondary-button" onClick={()=>setEditing(null)}>Cancel</button><button className="primary-action" onClick={saveEdit} disabled={!editName.trim()||loading}><Check size={17}/> Save changes</button></div></motion.div></div>}
+    </section>
+  </main>
 }
