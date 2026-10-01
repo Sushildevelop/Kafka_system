@@ -13,6 +13,10 @@ class StudyGroupCreate(BaseModel):
     member_ids: list[str] = Field(default_factory=list, max_length=500)
 
 
+class StudyGroupUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class StudyGroupAddMember(BaseModel):
     user_id: str = Field(min_length=1, max_length=100)
 

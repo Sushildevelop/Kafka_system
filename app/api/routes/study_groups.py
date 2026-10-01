@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 from uuid import uuid4
 from fastapi import APIRouter,File,HTTPException,Query,Request,UploadFile,WebSocket,WebSocketDisconnect,status
-from app.schemas.study_group import GroupChatMessageEvent,GroupMessageResponse,GroupTextMessageCreate,StudyGroupAddMember,StudyGroupCreate,StudyGroupResponse
+from app.schemas.study_group import GroupChatMessageEvent,GroupMessageResponse,GroupTextMessageCreate,StudyGroupAddMember,StudyGroupCreate,StudyGroupResponse,StudyGroupUpdate
 from app.services.chat_manager import chat_connection_manager
 from app.services.study_group_service import CHAT_TOPIC,create_group,publish_text_message,require_member
 from app.services.kafka_producer import KafkaUnavailableError
@@ -22,11 +22,47 @@ async def get_study_group(group_id:str,request:Request,user_id:str=Query(...)):
     except PermissionError as e: raise HTTPException(403,str(e)) from e
 @router.post("",response_model=StudyGroupResponse,status_code=status.HTTP_201_CREATED)
 async def create_study_group(data:StudyGroupCreate,request:Request): return await create_group(data,request.app.state.study_group_repository)
+@router.patch("/{group_id}",response_model=StudyGroupResponse)
+async def update_study_group(group_id:str,data:StudyGroupUpdate,request:Request,user_id:str=Query(...)):
+    try:
+        group=await require_member(group_id,user_id,request.app.state.study_group_repository)
+    except LookupError as e: raise HTTPException(404,str(e)) from e
+    except PermissionError as e: raise HTTPException(403,str(e)) from e
+    if group.owner_id != user_id: raise HTTPException(403,"Only the group owner can update this study group")
+    updated=await request.app.state.study_group_repository.update_group(group_id,data.name)
+    if updated is None: raise HTTPException(404,"Study group not found")
+    return updated
+
+@router.delete("/{group_id}",status_code=status.HTTP_204_NO_CONTENT)
+async def delete_study_group(group_id:str,request:Request,user_id:str=Query(...)):
+    try:
+        group=await require_member(group_id,user_id,request.app.state.study_group_repository)
+    except LookupError as e: raise HTTPException(404,str(e)) from e
+    except PermissionError as e: raise HTTPException(403,str(e)) from e
+    if group.owner_id != user_id: raise HTTPException(403,"Only the group owner can delete this study group")
+    if not await request.app.state.study_group_repository.delete_group(group_id): raise HTTPException(404,"Study group not found")
+
+@router.delete("/{group_id}/members/{member_id}",response_model=StudyGroupResponse)
+async def remove_group_member(group_id:str,member_id:str,request:Request,user_id:str=Query(...)):
+    try:
+        group=await require_member(group_id,user_id,request.app.state.study_group_repository)
+    except LookupError as e: raise HTTPException(404,str(e)) from e
+    except PermissionError as e: raise HTTPException(403,str(e)) from e
+    if user_id != group.owner_id and user_id != member_id: raise HTTPException(403,"Only the owner can remove another member")
+    if member_id == group.owner_id: raise HTTPException(400,"The group owner cannot be removed")
+    updated=await request.app.state.study_group_repository.remove_member(group_id,member_id)
+    if updated is None: raise HTTPException(404,"Study group not found")
+    return updated
+
 @router.post("/{group_id}/members",response_model=StudyGroupResponse)
-async def add_group_member(group_id:str,data:StudyGroupAddMember,request:Request):
-    group=await request.app.state.study_group_repository.add_member(group_id,data.user_id)
-    if group is None: raise HTTPException(404,"Study group not found")
-    return group
+async def add_group_member(group_id:str,data:StudyGroupAddMember,request:Request,user_id:str=Query(...)):
+    try: group=await require_member(group_id,user_id,request.app.state.study_group_repository)
+    except LookupError as e: raise HTTPException(404,str(e)) from e
+    except PermissionError as e: raise HTTPException(403,str(e)) from e
+    if group.owner_id != user_id: raise HTTPException(403,"Only the group owner can add members")
+    updated=await request.app.state.study_group_repository.add_member(group_id,data.user_id)
+    if updated is None: raise HTTPException(404,"Study group not found")
+    return updated
 @router.get("/{group_id}/messages",response_model=list[GroupMessageResponse])
 async def get_group_messages(group_id:str,request:Request,user_id:str=Query(...),skip:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
     try: await require_member(group_id,user_id,request.app.state.study_group_repository)

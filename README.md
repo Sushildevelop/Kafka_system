@@ -1,4 +1,4 @@
-# Kafka Learning Project
+# Kafka Project
 
 A small asynchronous lab for following an event from a FastAPI request, through a Kafka topic, into MongoDB. The API only publishes; a separate Kafka consumer validates and stores each message. The unit tests mock Kafka and do not need either infrastructure service.
 
@@ -352,7 +352,7 @@ The repository now includes a production-oriented frontend in `frontend/` for th
 - Next.js + React + TypeScript
 - Framer Motion for interface motion
 - React Three Fiber / Drei for the interactive 3D landing visual
-- Google Identity Services for Google-only sign-in
+- Study AI demo sign-in with a Google-style entry button
 - WebSocket client for real-time study-group chat
 - Responsive glass/neon visual system
 
@@ -365,7 +365,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to the same Google web client ID configured in the FastAPI `.env`. Set `NEXT_PUBLIC_API_URL` to the FastAPI API root (default `http://localhost:8000/api`).
+Set `NEXT_PUBLIC_API_URL` to the FastAPI API root (default `http://localhost:8000/api`). The current frontend prototype bypasses Google OAuth and creates a local demo session when the login button is clicked.
 
 ### Frontend routes
 
@@ -375,4 +375,4 @@ Set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to the same Google web client ID configured i
 - `/study-groups/[groupId]` — real-time group chat, media uploads and AI companion surface
 - `/account` — session and account deletion controls
 
-The frontend does not use Firebase. Google ID tokens are sent to the FastAPI `POST /api/auth/google` endpoint, verified server-side, and exchanged for the application's signed session token.
+The current frontend prototype does not perform Google OAuth. The Google-style login button creates a local demo session and redirects directly to `/study-groups`. The backend Google authentication endpoint remains available for a future real OAuth flow.

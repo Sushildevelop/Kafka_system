@@ -15,6 +15,18 @@ class StudyGroupRepository:
 
     async def get_group(self,group_id:str,*,use_primary:bool=False)->StudyGroup|None:
         c=self._write_groups if use_primary else self._read_groups; d=await c.find_one({"group_id":group_id}); return StudyGroup.model_validate(d) if d else None
+    async def update_group(self,group_id:str,name:str)->StudyGroupResponse|None:
+        d=await self._write_groups.find_one_and_update({"group_id":group_id},{"$set":{"name":name,"updated_at":datetime.now(timezone.utc)}},return_document=ReturnDocument.AFTER)
+        return StudyGroupResponse.model_validate(d) if d else None
+
+    async def delete_group(self,group_id:str)->bool:
+        result=await self._write_groups.delete_one({"group_id":group_id})
+        return result.deleted_count == 1
+
+    async def remove_member(self,group_id:str,user_id:str)->StudyGroup|None:
+        d=await self._write_groups.find_one_and_update({"group_id":group_id},{"$pull":{"member_ids":user_id},"$set":{"updated_at":datetime.now(timezone.utc)}},return_document=ReturnDocument.AFTER)
+        return StudyGroup.model_validate(d) if d else None
+
     async def add_member(self,group_id:str,user_id:str)->StudyGroup|None:
         d=await self._write_groups.find_one_and_update({"group_id":group_id},{"$addToSet":{"member_ids":user_id},"$set":{"updated_at":datetime.now(timezone.utc)}},return_document=ReturnDocument.AFTER); return StudyGroup.model_validate(d) if d else None
     async def save_message(self,event:GroupChatMessageEvent)->GroupMessageResponse:
