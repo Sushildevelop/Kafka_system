@@ -17,7 +17,9 @@ async def list_study_groups(request:Request,user_id:str=Query(...)):
     return await request.app.state.study_group_repository.list_groups_for_user(user_id)
 @router.get("/{group_id}",response_model=StudyGroupResponse)
 async def get_study_group(group_id:str,request:Request,user_id:str=Query(...)):
-    try: return await require_member(group_id,user_id,request.app.state.study_group_repository)
+    try:
+        group = await require_member(group_id,user_id,request.app.state.study_group_repository)
+        return StudyGroupResponse.model_validate(group.model_dump(mode="python", exclude={"id"}))
     except LookupError as e: raise HTTPException(404,str(e)) from e
     except PermissionError as e: raise HTTPException(403,str(e)) from e
 @router.post("",response_model=StudyGroupResponse,status_code=status.HTTP_201_CREATED)
@@ -62,7 +64,7 @@ async def add_group_member(group_id:str,data:StudyGroupAddMember,request:Request
     if group.owner_id != user_id: raise HTTPException(403,"Only the group owner can add members")
     updated=await request.app.state.study_group_repository.add_member(group_id,data.user_id)
     if updated is None: raise HTTPException(404,"Study group not found")
-    return updated
+    return StudyGroupResponse.model_validate(updated.model_dump(mode="python", exclude={"id"}))
 @router.get("/{group_id}/messages",response_model=list[GroupMessageResponse])
 async def get_group_messages(group_id:str,request:Request,user_id:str=Query(...),skip:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
     try: await require_member(group_id,user_id,request.app.state.study_group_repository)
