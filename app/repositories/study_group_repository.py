@@ -8,7 +8,9 @@ class StudyGroupRepository:
     def __init__(self,write_database:AsyncIOMotorDatabase,read_database:AsyncIOMotorDatabase)->None:
         self._write_groups=write_database[StudyGroup.Settings.name]; self._read_groups=read_database[StudyGroup.Settings.name]
         self._write_messages=write_database[GroupMessage.Settings.name]; self._read_messages=read_database[GroupMessage.Settings.name]
-    async def create_group(self,group:StudyGroup)->StudyGroupResponse: await group.insert(); return StudyGroupResponse.model_validate(group)
+    async def create_group(self,group:StudyGroup)->StudyGroupResponse:
+        await group.insert()
+        return StudyGroupResponse.model_validate(group.model_dump(mode="python", exclude={"id"}))
     async def list_groups_for_user(self,user_id:str,*,use_primary:bool=False)->list[StudyGroupResponse]:
         c=self._write_groups if use_primary else self._read_groups
         docs=await c.find({"member_ids":user_id},{"_id":0}).sort("updated_at",-1).to_list(length=100)
