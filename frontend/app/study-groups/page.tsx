@@ -10,7 +10,7 @@ type Group={group_id:string;name:string;owner_id:string;member_ids:string[];crea
 const accents=["cyan","violet","pink","green"];
 
 export default function StudyGroups(){
-  const [user,setUser]=useState<AuthUser|null>(null),[groups,setGroups]=useState<Group[]>([]),[name,setName]=useState(""),[editing,setEditing]=useState<Group|null>(null),[editName,setEditName]=useState(""),[menu,setMenu]=useState(""),[search,setSearch]=useState(""),[loading,setLoading]=useState(false),[error,setError]=useState("");
+  const [user,setUser]=useState<AuthUser|null>(null),[groups,setGroups]=useState<Group[]>([]),[name,setName]=useState(""),[editing,setEditing]=useState<Group|null>(null),[editName,setEditName]=useState(""),[memberId,setMemberId]=useState(""),[menu,setMenu]=useState(""),[search,setSearch]=useState(""),[loading,setLoading]=useState(false),[error,setError]=useState("");
 
   async function loadGroups(id:string){
     try{const r=await api.fetch("/study-groups?user_id="+encodeURIComponent(id));if(r.ok)setGroups(await r.json());else setError("Could not load your study groups.");}
@@ -30,6 +30,18 @@ export default function StudyGroups(){
     try{const r=await api.fetch("/study-groups/"+editing.group_id+"?user_id="+encodeURIComponent(user.user_id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:editName.trim()})});
       if(!r.ok)throw new Error(r.status===403?"Only the group owner can edit this group.":"Could not update the group.");const updated:Group=await r.json();setGroups(v=>v.map(g=>g.group_id===updated.group_id?updated:g));setEditing(null);
     }catch(e){setError(e instanceof Error?e.message:"Could not update the group.");}finally{setLoading(false)}
+  }
+  async function addMember(){
+    if(!user||!editing||!memberId.trim()||loading)return;setLoading(true);setError("");
+    try{const r=await api.fetch("/study-groups/"+editing.group_id+"/members?user_id="+encodeURIComponent(user.user_id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:memberId.trim()})});
+      if(!r.ok)throw new Error(r.status===403?"Only the group owner can add members.":"Could not add the member.");const updated:Group=await r.json();setGroups(v=>v.map(g=>g.group_id===updated.group_id?updated:g));setEditing(updated);setMemberId("");
+    }catch(e){setError(e instanceof Error?e.message:"Could not add the member.");}finally{setLoading(false)}
+  }
+  async function removeMember(member:string){
+    if(!user||!editing||loading)return;setLoading(true);setError("");
+    try{const r=await api.fetch("/study-groups/"+editing.group_id+"/members/"+encodeURIComponent(member)+"?user_id="+encodeURIComponent(user.user_id),{method:"DELETE"});
+      if(!r.ok)throw new Error(r.status===403?"Only the owner can remove another member.":"Could not remove the member.");const updated:Group=await r.json();setGroups(v=>v.map(g=>g.group_id===updated.group_id?updated:g));setEditing(updated);
+    }catch(e){setError(e instanceof Error?e.message:"Could not remove the member.");}finally{setLoading(false)}
   }
   async function deleteGroup(g:Group){
     if(!user||g.owner_id!==user.user_id||loading)return;if(!confirm("Delete “"+g.name+"”? This removes the group."))return;
@@ -55,7 +67,7 @@ export default function StudyGroups(){
         <Link href={"/study-groups/"+g.group_id}><div className="group-live"><i/> LIVE STUDY ROOM</div><h2>{g.name}</h2><p>Focused collaboration, shared resources, persistent discussion and AI-assisted learning.</p></Link>
         <div className="group-card-footer"><span><Users size={14}/> {g.member_ids.length} members</span><Link href={"/study-groups/"+g.group_id}><span>Open room <ArrowUpRight size={15}/></span></Link></div>
       </motion.article>)}</div>}
-      {editing&&<div className="modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&setEditing(null)}><motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} className="edit-modal glass"><div className="modal-head"><div><span className="eyebrow">GROUP SETTINGS</span><h2>Edit study group</h2></div><button onClick={()=>setEditing(null)}><X size={18}/></button></div><label>Group name<input autoFocus value={editName} onChange={e=>setEditName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveEdit()}/></label><div className="modal-actions"><button className="secondary-button" onClick={()=>setEditing(null)}>Cancel</button><button className="primary-action" onClick={saveEdit} disabled={!editName.trim()||loading}><Check size={17}/> Save changes</button></div></motion.div></div>}
+      {editing&&<div className="modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&setEditing(null)}><motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} className="edit-modal glass"><div className="modal-head"><div><span className="eyebrow">GROUP SETTINGS</span><h2>Edit study group</h2></div><button onClick={()=>setEditing(null)}><X size={18}/></button></div><label>Group name<input autoFocus value={editName} onChange={e=>setEditName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveEdit()}/></label><div className="member-manager"><div className="member-manager-head"><b>Members</b><span>{editing.member_ids.length} total</span></div><div className="member-list">{editing.member_ids.map((member,i)=><div className="member-row" key={member}><span><i>{(member===user?.user_id?"You":member).slice(0,1).toUpperCase()}</i>{member===user?.user_id?"You":member}</span>{member!==editing.owner_id&&<button onClick={()=>removeMember(member)}><Trash2 size={13}/></button>}</div>)}</div><div className="add-member-row"><input value={memberId} onChange={e=>setMemberId(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addMember()} placeholder="User ID to add…"/><button onClick={addMember} disabled={!memberId.trim()||loading}>Add</button></div></div><div className="modal-actions"><button className="secondary-button" onClick={()=>setEditing(null)}>Cancel</button><button className="primary-action" onClick={saveEdit} disabled={!editName.trim()||loading}><Check size={17}/> Save changes</button></div></motion.div></div>}
     </section>
   </main>
 }
