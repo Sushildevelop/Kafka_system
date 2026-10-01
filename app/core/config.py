@@ -28,9 +28,12 @@ class Settings(BaseSettings):
     kafka_chat_partitions: int = 3
     chat_media_max_size_mb: int = 50
 
-    google_client_id: str
+    # Optional for the current frontend demo because Google OAuth is bypassed.
+    # Set GOOGLE_CLIENT_ID when real Google authentication is enabled.
+    google_client_id: str = ""
     google_allowed_client_ids: str | None = None
-    auth_session_secret: str
+    # Local-development fallback only. Always override this in deployed environments.
+    auth_session_secret: str = "study-ai-local-development-secret-change-me"
     auth_session_expire_minutes: int = 1440
 
     model_config = SettingsConfigDict(
