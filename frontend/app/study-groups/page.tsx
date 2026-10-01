@@ -20,9 +20,15 @@ export default function StudyGroups(){
 
   async function createGroup(){
     const n=name.trim();if(!user||!n||loading)return;setLoading(true);setError("");
-    try{const r=await api.fetch("/study-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,owner_id:user.user_id,member_ids:[user.user_id]})});
-      if(!r.ok)throw new Error("Could not create the group.");const created:Group=await r.json();setGroups(v=>[created,...v]);setName("");
-    }catch(e){setError(e instanceof Error?e.message:"Could not create the group.");}finally{setLoading(false)}
+    try{
+      const r=await api.fetch("/study-groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,owner_id:user.user_id,member_ids:[user.user_id]})});
+      if(!r.ok){
+        let detail="";
+        try{const body=await r.json();detail=typeof body?.detail==="string"?body.detail:body?.detail?JSON.stringify(body.detail):"";}catch{}
+        throw new Error("Could not create the group ("+r.status+"): "+(detail||"The API returned an error."));
+      }
+      const created:Group=await r.json();setGroups(v=>[created,...v]);setName("");
+    }    }catch(e){setError(e instanceof Error?e.message:"Could not create the group.");}finally{setLoading(false)}
   }
   function startEdit(g:Group){setEditing(g);setEditName(g.name);setMenu("")}
   async function saveEdit(){
