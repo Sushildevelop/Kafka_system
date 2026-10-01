@@ -5,10 +5,10 @@ npm install
 cp .env.example .env.local
 npm run dev
 Open http://localhost:3000.
-Set NEXT_PUBLIC_GOOGLE_CLIENT_ID to the same Google web client ID accepted by FastAPI and NEXT_PUBLIC_API_URL to the API root.
+Set NEXT_PUBLIC_API_URL to the FastAPI API root. The current frontend demo bypasses Google OAuth and creates a local demo session when the Google-style login button is clicked.
 ## Surfaces
 - 3D landing page
-- Google-only authentication
+- Study AI demo sign-in (Google button UI)
 - Study-group creation
 - WebSocket group chat
 - Media uploads
