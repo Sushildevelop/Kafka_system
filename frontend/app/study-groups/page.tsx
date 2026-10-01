@@ -28,7 +28,7 @@ export default function StudyGroups(){
         throw new Error("Could not create the group ("+r.status+"): "+(detail||"The API returned an error."));
       }
       const created:Group=await r.json();setGroups(v=>[created,...v]);setName("");
-    }    }catch(e){setError(e instanceof Error?e.message:"Could not create the group.");}finally{setLoading(false)}
+    }catch(e){setError(e instanceof Error?e.message:"Could not create the group.");}finally{setLoading(false)}
   }
   function startEdit(g:Group){setEditing(g);setEditName(g.name);setMenu("")}
   async function saveEdit(){
