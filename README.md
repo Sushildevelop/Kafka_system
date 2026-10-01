@@ -1,4 +1,4 @@
-# Kafka Learning Project
+# Kafka Project
 
 A small asynchronous lab for following an event from a FastAPI request, through a Kafka topic, into MongoDB. The API only publishes; a separate Kafka consumer validates and stores each message. The unit tests mock Kafka and do not need either infrastructure service.
 
