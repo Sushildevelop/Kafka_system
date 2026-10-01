@@ -54,7 +54,7 @@ async def remove_group_member(group_id:str,member_id:str,request:Request,user_id
     if member_id == group.owner_id: raise HTTPException(400,"The group owner cannot be removed")
     updated=await request.app.state.study_group_repository.remove_member(group_id,member_id)
     if updated is None: raise HTTPException(404,"Study group not found")
-    return updated
+    return StudyGroupResponse.model_validate(updated.model_dump(mode="python", exclude={"id"}))
 
 @router.post("/{group_id}/members",response_model=StudyGroupResponse)
 async def add_group_member(group_id:str,data:StudyGroupAddMember,request:Request,user_id:str=Query(...)):
