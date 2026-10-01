@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from beanie.operators import Set
-from motor.motor_asyncio import AsyncIOMotorDatabase\nfrom pymongo import ReturnDocument
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from app.models.study_group import GroupMessage, StudyGroup
 from app.schemas.study_group import GroupChatMessageEvent, GroupMessageResponse, StudyGroupResponse
 class StudyGroupRepository:
