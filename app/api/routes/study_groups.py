@@ -55,10 +55,14 @@ async def remove_group_member(group_id:str,member_id:str,request:Request,user_id
     return updated
 
 @router.post("/{group_id}/members",response_model=StudyGroupResponse)
-async def add_group_member(group_id:str,data:StudyGroupAddMember,request:Request):
-    group=await request.app.state.study_group_repository.add_member(group_id,data.user_id)
-    if group is None: raise HTTPException(404,"Study group not found")
-    return group
+async def add_group_member(group_id:str,data:StudyGroupAddMember,request:Request,user_id:str=Query(...)):
+    try: group=await require_member(group_id,user_id,request.app.state.study_group_repository)
+    except LookupError as e: raise HTTPException(404,str(e)) from e
+    except PermissionError as e: raise HTTPException(403,str(e)) from e
+    if group.owner_id != user_id: raise HTTPException(403,"Only the group owner can add members")
+    updated=await request.app.state.study_group_repository.add_member(group_id,data.user_id)
+    if updated is None: raise HTTPException(404,"Study group not found")
+    return updated
 @router.get("/{group_id}/messages",response_model=list[GroupMessageResponse])
 async def get_group_messages(group_id:str,request:Request,user_id:str=Query(...),skip:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
     try: await require_member(group_id,user_id,request.app.state.study_group_repository)
